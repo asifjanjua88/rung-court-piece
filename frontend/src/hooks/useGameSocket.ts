@@ -9,15 +9,18 @@ export function useGameSocket(roomId: string, playerId: string) {
     setState, setHand, setLastEvent,
     setTossResult, setColorCaller, setLastCardPlayed,
     setRungRevealInfo, setLastTrick, pushDealBatch, setGameError, setRoundOverInfo,
+    setPresence,
   } = useGameStore()
 
   useEffect(() => {
     if (!roomId || !playerId) return
     const socket = connectSocket()
 
-    socket.on('game_state', (data: GameState) => {
-      setState(data)
+    socket.on('game_state', (data: GameState & { presence?: Record<string, 'connected'|'disconnected'> }) => {
+      const { presence, ...gameState } = data as any
+      setState(gameState)
       if (data.tossResult) setTossResult(data.tossResult as any)
+      if (presence) setPresence(presence)
       // NOTE: intentionally does NOT touch roundOverInfo — it lives in its own field
     })
     socket.on('hand_update', ({ hand }: { hand: Card[] }) => setHand(hand))
@@ -95,6 +98,21 @@ export function useGameSocket(roomId: string, playerId: string) {
       setLastEvent('round_over')
     })
 
+    // ── Player presence ────────────────────────────────────────────────────────
+    socket.on('player_disconnected', (data: { playerId: string; displayName: string; presence: Record<string, 'connected'|'disconnected'>; gracePeriodMs: number }) => {
+      setPresence(data.presence)
+      setLastEvent('player_disconnected')
+    })
+
+    socket.on('player_reconnected', (data: { playerId: string; displayName: string; presence: Record<string, 'connected'|'disconnected'> }) => {
+      setPresence(data.presence)
+      setLastEvent('player_reconnected')
+    })
+
+    socket.on('player_connected', (data: { playerId: string; presence: Record<string, 'connected'|'disconnected'> }) => {
+      if (data.presence) setPresence(data.presence)
+    })
+
     socket.on('game_error', ({ error }: { error: string }) => {
       console.error('[GameSocket]', error)
       setGameError(error)
@@ -122,9 +140,12 @@ export function useGameSocket(roomId: string, playerId: string) {
       socket.off('card_played'); socket.off('trick_complete')
       socket.off('rung_revealed'); socket.off('next_trick')
       socket.off('round_over'); socket.off('game_error')
+      socket.off('player_disconnected'); socket.off('player_reconnected')
+      socket.off('player_connected')
     }
   }, [roomId, playerId, setState, setHand, setLastEvent, setTossResult, setColorCaller,
-      setLastCardPlayed, setRungRevealInfo, setLastTrick, pushDealBatch, setGameError, setRoundOverInfo])
+      setLastCardPlayed, setRungRevealInfo, setLastTrick, pushDealBatch, setGameError,
+      setRoundOverInfo, setPresence])
 
   const playCard       = useCallback((card: Card) =>
     connectSocket().emit('play_card', { roomId, card }), [roomId])

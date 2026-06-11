@@ -23,6 +23,8 @@ export interface GameTable2DProps {
   hiddenRungCard:  Card | null
   /** Populated when the hidden rung gets revealed mid-game */
   rungRevealCard:  Card | null
+  /** Live presence map: playerId → 'connected' | 'disconnected' */
+  presence:        Record<string, 'connected' | 'disconnected'>
 }
 
 // Build server-position → screen-seat map RELATIVE to the human player's
@@ -197,10 +199,11 @@ function CardStack({ count }: { count: number }) {
 // the avatar. Reduces the chip's height to ~80px so North fits above the felt.
 function Chip({
   name, seat, team, isLead, hasPlayed, cardCount, face,
-  dir, compact = false,
+  dir, compact = false, disconnected = false,
 }: {
   name:string; seat:string; team:'A'|'B'; isLead:boolean; hasPlayed:boolean
-  cardCount:number; face:string; dir:'top'|'bottom'|'left'|'right'; compact?: boolean
+  cardCount:number; face:string; dir:'top'|'bottom'|'left'|'right'
+  compact?: boolean; disconnected?: boolean
 }) {
   const tc    = team === 'A' ? '#22d3ee' : '#fb923c'
   const isRow = dir === 'left' || dir === 'right'
@@ -209,12 +212,15 @@ function Chip({
     <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:3 }}>
       <div style={{
         width:44, height:44, borderRadius:'50%', position:'relative', flexShrink:0,
-        background: team==='A' ? 'linear-gradient(135deg,#0e4a5e,#0891b2)' : 'linear-gradient(135deg,#7c2d12,#ea580c)',
-        border: isLead ? `2px solid ${tc}` : '1.5px solid rgba(255,255,255,0.12)',
-        boxShadow: isLead ? `0 0 18px ${tc}88,0 0 36px ${tc}33` : '0 3px 12px rgba(0,0,0,0.6)',
+        background: disconnected
+          ? 'linear-gradient(135deg,#1a1a2e,#0f0f1a)'
+          : (team==='A' ? 'linear-gradient(135deg,#0e4a5e,#0891b2)' : 'linear-gradient(135deg,#7c2d12,#ea580c)'),
+        border: disconnected ? '2px solid rgba(239,68,68,0.7)' : (isLead ? `2px solid ${tc}` : '1.5px solid rgba(255,255,255,0.12)'),
+        boxShadow: disconnected ? '0 0 14px rgba(239,68,68,0.4)' : (isLead ? `0 0 18px ${tc}88,0 0 36px ${tc}33` : '0 3px 12px rgba(0,0,0,0.6)'),
         display:'flex', alignItems:'center', justifyContent:'center', fontSize:20,
+        opacity: disconnected ? 0.6 : 1,
       }}>
-        {face}
+        {disconnected ? '📵' : face}
         {/* Played checkmark */}
         {hasPlayed && (
           <div style={{ position:'absolute', bottom:-2, right:-2, width:15, height:15, borderRadius:'50%', background:'#16a34a', border:'2px solid #000', display:'flex', alignItems:'center', justifyContent:'center', fontSize:7, color:'#fff', fontWeight:800 }}>✓</div>
@@ -240,8 +246,8 @@ function Chip({
         <div style={{ fontSize:11, fontWeight:700, color:isLead?'#fde68a':'#f1f5f9', whiteSpace:'nowrap' }}>
           {isLead ? '⭐ ' : ''}{name}
         </div>
-        <div style={{ fontSize:9, color:'rgba(255,255,255,0.35)', marginTop:1, letterSpacing:'0.3px' }}>
-          {seat} · T{team}
+        <div style={{ fontSize:9, color: disconnected ? '#f87171' : 'rgba(255,255,255,0.35)', marginTop:1, letterSpacing:'0.3px' }}>
+          {disconnected ? '⚠ Disconnected' : `${seat} · T${team}`}
         </div>
       </div>
     </div>
@@ -263,7 +269,7 @@ function Chip({
 }
 
 // ── Main component ─────────────────────────────────────────────────────────────
-export default function GameTable2D({ currentTrick, trickHistory, aiPlayers, playerMap, state, userId, isMyTurn, lastTrick, hiddenRungCard, rungRevealCard }: GameTable2DProps) {
+export default function GameTable2D({ currentTrick, trickHistory, aiPlayers, playerMap, state, userId, isMyTurn, lastTrick, hiddenRungCard, rungRevealCard, presence }: GameTable2DProps) {
 
   // SFX
   const cardSnd = useRef<HTMLAudioElement|null>(null)
@@ -423,7 +429,8 @@ export default function GameTable2D({ currentTrick, trickHistory, aiPlayers, pla
             isLead={state.phase==='playing'&&state.currentTrick.length===0&&state.leadPlayerId===north.id}
             hasPlayed={state.currentTrick.some(t=>t.playerId===north.id)}
             cardCount={state.handCounts?.[north.id]??0}
-            face="👾" dir="bottom" compact />
+            face="👾" dir="bottom" compact
+            disconnected={presence[north.id]==='disconnected'} />
         </div>
       )}
 
@@ -435,7 +442,8 @@ export default function GameTable2D({ currentTrick, trickHistory, aiPlayers, pla
             isLead={state.phase==='playing'&&state.currentTrick.length===0&&state.leadPlayerId===east.id}
             hasPlayed={state.currentTrick.some(t=>t.playerId===east.id)}
             cardCount={state.handCounts?.[east.id]??0}
-            face="🤖" dir="left" />
+            face="🤖" dir="left"
+            disconnected={presence[east.id]==='disconnected'} />
         </div>
       )}
 
@@ -446,7 +454,8 @@ export default function GameTable2D({ currentTrick, trickHistory, aiPlayers, pla
             isLead={state.phase==='playing'&&state.currentTrick.length===0&&state.leadPlayerId===west.id}
             hasPlayed={state.currentTrick.some(t=>t.playerId===west.id)}
             cardCount={state.handCounts?.[west.id]??0}
-            face="🦾" dir="right" />
+            face="🦾" dir="right"
+            disconnected={presence[west.id]==='disconnected'} />
         </div>
       )}
 

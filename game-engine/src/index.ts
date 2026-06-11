@@ -131,6 +131,9 @@ const io = new Server(server, {
 // Active game rooms: roomId → GameRoom
 const rooms = new Map<string, GameRoom>()
 
+// Track which room each connected player is in (for disconnect routing)
+const playerRoom = new Map<string, string>()   // playerId → roomId
+
 // ── JWT auth on WebSocket handshake ───────────────────────────────────────────
 io.use((socket, next) => {
   const token = socket.handshake.auth?.token
@@ -172,6 +175,7 @@ io.on('connection', (socket) => {
         rooms.set(roomId, new GameRoom(roomId, slots, io))
       }
       rooms.get(roomId)!.join(socket, playerId)
+      playerRoom.set(playerId, roomId)        // remember which room this player is in
     } catch (err) {
       console.error(`[join_room] Error for room ${roomId}:`, err)
       socket.emit('game_error', { error: 'Failed to join room.' })
@@ -246,6 +250,11 @@ io.on('connection', (socket) => {
   // ── Disconnect ──────────────────────────────────────────────────────────────
   socket.on('disconnect', () => {
     console.log(`Player disconnected: ${playerId}`)
+    const roomId = playerRoom.get(playerId)
+    if (roomId) {
+      rooms.get(roomId)?.disconnect(playerId)
+      playerRoom.delete(playerId)
+    }
   })
 })
 

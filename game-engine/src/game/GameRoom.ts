@@ -10,10 +10,15 @@ export interface RoomSlot {
   displayName?: string    // human username or bot name (e.g. "Faisal")
 }
 
+// How long (ms) we wait before declaring a disconnected player "gone"
+const RECONNECT_GRACE_MS = 90_000  // 90 seconds
+
 export class GameRoom {
   readonly roomId: string
   private slots: RoomSlot[]
-  private sockets: Map<string, Socket> = new Map()  // playerId → socket
+  private sockets: Map<string, Socket> = new Map()       // playerId → socket
+  private connectedPlayers: Set<string> = new Set()      // who is currently online
+  private reconnectTimers: Map<string, ReturnType<typeof setTimeout>> = new Map()
   private machine: GameStateMachine | null = null
   private dealingTeam: Team = 'A'
   private io: Server
@@ -24,23 +29,93 @@ export class GameRoom {
     this.io = io
   }
 
-  // ── Player connects via WebSocket ────────────────────────────────────────────
+  /** Current presence snapshot: maps playerId → 'connected' | 'disconnected' */
+  getPresence(): Record<string, 'connected' | 'disconnected'> {
+    const presence: Record<string, 'connected' | 'disconnected'> = {}
+    for (const slot of this.slots) {
+      if (slot.type === 'human') {
+        presence[slot.playerId] = this.connectedPlayers.has(slot.playerId)
+          ? 'connected' : 'disconnected'
+      }
+    }
+    return presence
+  }
+
+  // ── Player connects / reconnects via WebSocket ───────────────────────────────
 
   join(socket: Socket, playerId: string): void {
     const slot = this.slots.find(s => s.playerId === playerId)
     if (!slot) { socket.emit('error', { message: 'Not in this room' }); return }
 
+    const wasDisconnected = !this.connectedPlayers.has(playerId) && this.sockets.has(playerId)
+
+    // Cancel any pending "gone" timer for this player
+    const existing = this.reconnectTimers.get(playerId)
+    if (existing) { clearTimeout(existing); this.reconnectTimers.delete(playerId) }
+
     this.sockets.set(playerId, socket)
+    this.connectedPlayers.add(playerId)
     socket.join(this.roomId)
     socket.emit('room_joined', { roomId: this.roomId, position: slot.position })
 
     // If game already started (player reconnected or joined late), send current state
     if (this.machine) {
-      socket.emit('game_state', this.machine.getSnapshot())
+      socket.emit('game_state', { ...this.machine.getSnapshot(), presence: this.getPresence() })
       socket.emit('hand_update', { hand: this.machine.getHandFor(playerId) })
     }
 
-    this.broadcastToRoom('player_connected', { playerId, position: slot.position })
+    // Broadcast reconnected vs. first-connect differently so frontend can show toast
+    if (wasDisconnected) {
+      this.broadcastToRoom('player_reconnected', {
+        playerId,
+        displayName: slot.displayName,
+        position:    slot.position,
+        presence:    this.getPresence(),
+      })
+    } else {
+      this.broadcastToRoom('player_connected', {
+        playerId,
+        position: slot.position,
+        presence: this.getPresence(),
+      })
+    }
+  }
+
+  // ── Player's socket dropped ───────────────────────────────────────────────────
+
+  disconnect(playerId: string): void {
+    const slot = this.slots.find(s => s.playerId === playerId)
+    if (!slot) return                          // not in this room
+
+    this.connectedPlayers.delete(playerId)
+    this.sockets.delete(playerId)
+
+    // Notify everyone immediately
+    this.broadcastToRoom('player_disconnected', {
+      playerId,
+      displayName: slot.displayName ?? playerId,
+      position:    slot.position,
+      presence:    this.getPresence(),
+      gracePeriodMs: RECONNECT_GRACE_MS,
+    })
+
+    console.log(`[GameRoom] ${playerId} disconnected from ${this.roomId} — grace ${RECONNECT_GRACE_MS / 1000}s`)
+
+    // Start grace period — after expiry just keep the slot reserved (no AI takeover)
+    const timer = setTimeout(() => {
+      this.reconnectTimers.delete(playerId)
+      console.log(`[GameRoom] Grace period expired for ${playerId} in ${this.roomId}`)
+      // Broadcast updated presence so UI can show permanent "away" indicator
+      this.broadcastToRoom('player_disconnected', {
+        playerId,
+        displayName: slot.displayName ?? playerId,
+        position:    slot.position,
+        presence:    this.getPresence(),
+        gracePeriodMs: 0,   // 0 = grace expired
+      })
+    }, RECONNECT_GRACE_MS)
+
+    this.reconnectTimers.set(playerId, timer)
   }
 
   // ── Start game (called when all slots filled and creator triggers start) ──────
@@ -179,8 +254,8 @@ export class GameRoom {
       for (const [pid, socket] of this.sockets) {
         socket.emit('hand_update', { hand: this.machine.getHandFor(pid) })
       }
-      // Also broadcast public game snapshot (no hands)
-      this.broadcastToRoom('game_state', this.machine.getSnapshot())
+      // Also broadcast public game snapshot (no hands) — include live presence
+      this.broadcastToRoom('game_state', { ...this.machine.getSnapshot(), presence: this.getPresence() })
 
       // ── Async AI card play ───────────────────────────────────────────────
       if (this.machine.aiPending) {
@@ -254,7 +329,7 @@ export class GameRoom {
     socket.join(this.roomId)
 
     if (this.machine) {
-      socket.emit('game_state', this.machine.getSnapshot())
+      socket.emit('game_state', { ...this.machine.getSnapshot(), presence: this.getPresence() })
       socket.emit('hand_update', { hand: this.machine.getHandFor(playerId) })
     }
     // If machine not started yet, client will receive game_state when startGame() fires

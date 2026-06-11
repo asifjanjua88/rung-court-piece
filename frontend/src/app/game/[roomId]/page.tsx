@@ -106,6 +106,7 @@ export default function GameTablePage() {
     tossResult, colorCaller, lastCardPlayed,
     hiddenRungCard, rungRevealInfo,
     lastTrick, dealQueue, gameError, roundOverInfo,
+    presence,
     setTossResult, setLastCardPlayed, setRungRevealInfo, popDealBatch,
   } = useGameStore()
 
@@ -456,7 +457,38 @@ export default function GameTablePage() {
               lastTrick={lastTrick ?? null}
               hiddenRungCard={hiddenRungCard}
               rungRevealCard={rungRevealInfo?.card ?? null}
+              presence={presence}
             />
+
+            {/* ── Disconnection banner ─────────────────────────────────── */}
+            {(() => {
+              const disconnectedHumans = (state.players ?? []).filter(p =>
+                p.type === 'human' && p.id !== user?.id && presence[p.id] === 'disconnected'
+              )
+              if (disconnectedHumans.length === 0) return null
+              return (
+                <div style={{
+                  position: 'absolute', bottom: 8, left: '50%',
+                  transform: 'translateX(-50%)', zIndex: 40,
+                  background: 'rgba(127,29,29,0.97)',
+                  border: '1px solid rgba(239,68,68,0.5)',
+                  borderRadius: 12, padding: '8px 20px',
+                  display: 'flex', alignItems: 'center', gap: 10,
+                  boxShadow: '0 4px 24px rgba(0,0,0,0.7)',
+                  whiteSpace: 'nowrap',
+                }}>
+                  <span style={{ fontSize: 16 }}>📵</span>
+                  <div>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: '#fca5a5' }}>
+                      {disconnectedHumans.map(p => playerNames[p.id] ?? 'A player').join(', ')} disconnected
+                    </div>
+                    <div style={{ fontSize: 10, color: 'rgba(252,165,165,0.6)', marginTop: 1 }}>
+                      Waiting for them to rejoin… (90s grace period)
+                    </div>
+                  </div>
+                </div>
+              )
+            })()}
 
             {/* Trick badge */}
             {state.phase === 'playing' && (

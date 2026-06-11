@@ -72,6 +72,8 @@ interface GameStore {
   gameError:       string | null
   /** Round-over snapshot — never overwritten by game_state events */
   roundOverInfo:   RoundOverInfo | null
+  /** Live presence: playerId → 'connected' | 'disconnected' */
+  presence:        Record<string, 'connected' | 'disconnected'>
 
   setState:           (s: GameState | ((prev: GameState | null) => GameState | null)) => void
   setHand:            (hand: Card[]) => void
@@ -85,6 +87,7 @@ interface GameStore {
   setRungRevealInfo:  (info: RungRevealInfo | null) => void
   setLastTrick:       (trick: TrickWinnerInfo | null) => void
   setRoundOverInfo:   (info: RoundOverInfo | null) => void
+  setPresence:        (p: Record<string, 'connected' | 'disconnected'>) => void
   pushDealBatch:      (batch: DealBatch) => void
   popDealBatch:       () => void
   reset:              () => void
@@ -104,6 +107,7 @@ export const useGameStore = create<GameStore>(set => ({
   dealQueue:      [],
   gameError:      null,
   roundOverInfo:  null,
+  presence:       {},
 
   setState:          updater => set(prev => ({
     state: typeof updater === 'function' ? updater(prev.state) : updater,
@@ -119,12 +123,13 @@ export const useGameStore = create<GameStore>(set => ({
   setRungRevealInfo: info   => set({ rungRevealInfo: info }),
   setLastTrick:      trick  => set({ lastTrick: trick }),
   setRoundOverInfo:  info   => set({ roundOverInfo: info }),
+  setPresence:       p      => set({ presence: p }),
   pushDealBatch:     batch  => set(prev => ({ dealQueue: [...prev.dealQueue, batch] })),
   popDealBatch:      ()     => set(prev => ({ dealQueue: prev.dealQueue.slice(1) })),
   reset: () => set({
     state: null, myHand: [], selectedCard: null, lastEvent: null,
     tossResult: null, colorCaller: null, lastCardPlayed: null,
     hiddenRungCard: null, rungRevealInfo: null, lastTrick: null,
-    dealQueue: [], gameError: null, roundOverInfo: null,
+    dealQueue: [], gameError: null, roundOverInfo: null, presence: {},
   }),
 }))
