@@ -27,11 +27,45 @@ function signRefresh(id: string): string {
 
 // ─── Guest ────────────────────────────────────────────────────────────────────
 
-export async function createGuest(): Promise<{ accessToken: string; user: object }> {
-  const id = uuidv4()
-  const displayName = `Player#${Math.floor(1000 + Math.random() * 9000)}`
-  const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000)
+export async function createGuest(name: string): Promise<{ accessToken: string; user: object; isReturning: boolean }> {
+  // Normalise: trim, collapse spaces, max 20 chars
+  const displayName = name.trim().replace(/\s+/g, ' ').slice(0, 20)
+  if (!displayName) throw new Error('NAME_REQUIRED')
 
+  const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) // 7-day window
+
+  // ── Find existing guest with this name (case-insensitive) ───────────────────
+  // This lets a player re-open the browser and get the SAME UUID back,
+  // so the game engine recognises them as the same person.
+  const existing = await db.query(
+    `SELECT id, display_name FROM users
+     WHERE lower(display_name) = lower($1)
+       AND identity_type = 'guest'
+       AND guest_expires_at > NOW()
+     LIMIT 1`,
+    [displayName]
+  )
+
+  if (existing.rows.length > 0) {
+    // Returning guest — extend expiry and re-issue token
+    const { id, display_name } = existing.rows[0]
+    await db.query(
+      `UPDATE users SET guest_expires_at = $1 WHERE id = $2`,
+      [expiresAt, id]
+    )
+    const accessToken = signAccess(id, 'guest', true)
+    return { accessToken, user: { id, displayName: display_name, identityType: 'guest' }, isReturning: true }
+  }
+
+  // ── New guest — check name is not taken by any active user ──────────────────
+  const taken = await db.query(
+    `SELECT id FROM users WHERE lower(display_name) = lower($1) LIMIT 1`,
+    [displayName]
+  )
+  if (taken.rows.length > 0) throw new Error('NAME_TAKEN')
+
+  // Create new guest account
+  const id = uuidv4()
   await db.query(
     `INSERT INTO users (id, identity_type, display_name, is_verified, guest_expires_at)
      VALUES ($1, 'guest', $2, true, $3)`,
@@ -39,7 +73,7 @@ export async function createGuest(): Promise<{ accessToken: string; user: object
   )
 
   const accessToken = signAccess(id, 'guest', true)
-  return { accessToken, user: { id, displayName, identityType: 'guest' } }
+  return { accessToken, user: { id, displayName, identityType: 'guest' }, isReturning: false }
 }
 
 // ─── Register ─────────────────────────────────────────────────────────────────

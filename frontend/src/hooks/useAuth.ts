@@ -7,8 +7,8 @@ export function useAuth() {
   const router = useRouter()
   const { user, setAuth, clearAuth, isAuthenticated } = useAuthStore()
 
-  const playAsGuest = async () => {
-    const { data } = await authApi.guest()
+  const playAsGuest = async (name: string) => {
+    const { data } = await authApi.guest(name)
     setAuth(data.user, data.accessToken)
     router.push('/lobby')
   }

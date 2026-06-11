@@ -42,7 +42,7 @@ api.interceptors.response.use(
 // ── Auth ──────────────────────────────────────────────────────────────────────
 
 export const authApi = {
-  guest: () => api.post('/auth/guest'),
+  guest: (name: string) => api.post('/auth/guest', { name }),
   register: (data: { email: string; password: string; displayName: string }) =>
     api.post('/auth/register', data),
   verifyEmail: (token: string) => api.post('/auth/verify-email', { token }),

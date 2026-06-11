@@ -52,13 +52,24 @@ function validationError(res: Response, error: z.ZodError) {
 
 /**
  * POST /api/v1/auth/guest
- * No body required — generates a temporary guest account instantly
+ * Body: { name: string }
+ * Creates or resumes a guest account by name (case-insensitive unique identifier).
  */
-export const guestLogin = async (_req: Request, res: Response) => {
+export const guestLogin = async (req: Request, res: Response) => {
   try {
-    const result = await authService.createGuest()
+    const { name } = req.body
+    if (!name || typeof name !== 'string') {
+      return res.status(400).json({ error: 'NAME_REQUIRED', message: 'Please enter your name.' })
+    }
+    const result = await authService.createGuest(name)
     return res.status(201).json(result)
-  } catch (err) {
+  } catch (err: any) {
+    if (err.message === 'NAME_REQUIRED') {
+      return res.status(400).json({ error: 'NAME_REQUIRED', message: 'Please enter your name.' })
+    }
+    if (err.message === 'NAME_TAKEN') {
+      return res.status(409).json({ error: 'NAME_TAKEN', message: 'This name is already taken by a registered user. Please choose another.' })
+    }
     console.error('[guestLogin]', err)
     return res.status(500).json({ error: 'INTERNAL_ERROR' })
   }
