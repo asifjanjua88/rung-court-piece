@@ -1,0 +1,48 @@
+# Development overrides — run with:
+# docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+
+services:
+
+  frontend:
+    command: sh -c "npm install && npm run dev"
+    environment:
+      - NODE_ENV=development
+      - WATCHPACK_POLLING=true   # force polling so Windows → Linux file changes are detected
+      - CHOKIDAR_USEPOLLING=true
+    ports:
+      - "3000:3000"   # expose for direct access / debugging
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+      - /app/.next              # anonymous vol shadows stale production build cache
+
+  api:
+    command: npm run dev
+    environment:
+      - SMTP_PORT=1025   # mailpit listens on 1025, not 25
+    volumes:
+      - ./api:/app
+      - /app/node_modules
+
+  game-engine:
+    command: npm run dev
+    environment:
+      - TS_NODE_DEV_POLL=true   # force polling so Windows → Linux file changes are detected
+    volumes:
+      - ./game-engine:/app
+      - /app/node_modules
+
+  # Replace postfix with mailpit in dev — UI at http://localhost:8025
+  postfix:
+    image: axllent/mailpit
+    ports:
+      - "8025:8025"   # web UI
+      - "1025:1025"   # SMTP
+
+  postgres:
+    ports:
+      - "5432:5432"   # expose for local DB tools
+
+  redis:
+    ports:
+      - "6379:6379"   # expose for local Redis tools
