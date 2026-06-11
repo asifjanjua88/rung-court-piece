@@ -23,9 +23,10 @@ export default function HiddenRungPicker({ hand, onSelect }: Props) {
     selected?.suit === c.suit && selected?.rank === c.rank
 
   return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/70 backdrop-blur-sm">
-      <div className="bg-slate-800 rounded-2xl border border-gold/40 p-6 max-w-2xl w-full
-                      mx-4 shadow-2xl animate-bounce-in">
+    <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/70 backdrop-blur-sm"
+         style={{ alignItems: 'flex-end', padding: 0 }}>
+      <div className="bg-slate-800 rounded-t-2xl border border-gold/40 w-full shadow-2xl animate-bounce-in"
+           style={{ maxHeight: '85dvh', overflowY: 'auto', padding: '20px 16px 24px' }}>
         <div className="text-center mb-6">
           <div className="text-3xl mb-2">🤫</div>
           <h2 className="text-xl font-bold text-slate-100">Select Your Hidden Rung Card</h2>
@@ -45,7 +46,7 @@ export default function HiddenRungPicker({ hand, onSelect }: Props) {
                 card={card}
                 selected={isSelected(card)}
                 onClick={() => setSelected(isSelected(card) ? null : card)}
-                size="md"
+                size="sm"
               />
             </div>
           ))}

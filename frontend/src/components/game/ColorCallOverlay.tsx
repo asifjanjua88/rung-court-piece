@@ -66,12 +66,14 @@ export default function ColorCallOverlay({ isRungHolder, onCall, onPass }: Props
         borderRadius: 24,
         border: '1px solid rgba(139,92,246,0.3)',
         boxShadow: '0 0 60px rgba(139,92,246,0.2), 0 32px 80px rgba(0,0,0,0.8), inset 0 1px 0 rgba(255,255,255,0.07)',
-        padding: '36px 32px',
+        padding: 'clamp(20px, 5vw, 36px) clamp(16px, 5vw, 32px)',
         maxWidth: 420,
         width: '100%',
-        margin: '0 16px',
+        margin: '0 12px',
         position: 'relative',
         overflow: 'hidden',
+        maxHeight: '90dvh',
+        overflowY: 'auto',
       }}>
         {/* Top shimmer line */}
         <div style={{ position:'absolute', top:0, left:0, right:0, height:1, background:'linear-gradient(90deg, transparent, rgba(139,92,246,0.6), rgba(220,38,38,0.4), transparent)' }} />
@@ -135,7 +137,7 @@ export default function ColorCallOverlay({ isRungHolder, onCall, onPass }: Props
             <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap: 12, marginBottom: 16 }}>
               {SUITS.map(s => (
                 <button key={s.suit} onClick={() => onCall(s.suit)} style={{
-                  padding: '20px 12px',
+                  padding: 'clamp(12px,3vw,20px) clamp(8px,2vw,12px)',
                   background: s.bg,
                   border: `1.5px solid ${s.border}`,
                   borderRadius: 16,

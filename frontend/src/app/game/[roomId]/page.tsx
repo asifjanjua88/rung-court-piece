@@ -5,6 +5,7 @@ import dynamic from 'next/dynamic'
 import { useAuthStore } from '@/store/auth.store'
 import { useGameStore } from '@/store/game.store'
 import { useGameSocket } from '@/hooks/useGameSocket'
+import { useScreenSize } from '@/hooks/useScreenSize'
 import PlayingCard from '@/components/game/PlayingCard'
 import ScoreBoard from '@/components/game/ScoreBoard'
 import ColorCallOverlay from '@/components/game/ColorCallOverlay'
@@ -112,6 +113,8 @@ export default function GameTablePage() {
 
   const { playCard, dealCards, selectHiddenRung, callColor, passColorCall, startNextRound } =
     useGameSocket(roomId, user?.id ?? '')
+
+  const { isMobile, isSmall } = useScreenSize()
 
   // ── Auth guard (redirect if logged out) ────────────────────────────────
   useEffect(() => { if (!user) router.push('/') }, [user, router])
@@ -314,34 +317,35 @@ export default function GameTablePage() {
     }}>
 
       {/* ── Top bar ──────────────────────────────────────────────────────── */}
-      <div className="flex items-center justify-between px-4 py-1.5 shrink-0" style={{
+      <div className="flex items-center justify-between shrink-0" style={{
         background: 'linear-gradient(180deg, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0.25) 100%)',
         backdropFilter: 'blur(16px)',
         borderBottom: '1px solid rgba(255,255,255,0.07)',
         boxShadow: '0 1px 0 rgba(180,130,255,0.08)',
+        padding: isMobile ? '4px 8px' : '6px 16px',
       }}>
         {/* Exit */}
         <button onClick={() => router.push('/lobby')} style={{
           background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)',
-          borderRadius: 10, padding: '5px 14px', color: 'rgba(255,255,255,0.5)',
-          fontSize: 12, cursor: 'pointer', transition: 'all 0.2s', fontWeight: 500,
-        }}
-          onMouseEnter={e => {(e.currentTarget as HTMLButtonElement).style.color = 'rgba(255,255,255,0.85)'; (e.currentTarget as HTMLButtonElement).style.background = 'rgba(255,255,255,0.1)'}}
-          onMouseLeave={e => {(e.currentTarget as HTMLButtonElement).style.color = 'rgba(255,255,255,0.5)'; (e.currentTarget as HTMLButtonElement).style.background = 'rgba(255,255,255,0.06)'}}
-        >← Exit</button>
+          borderRadius: 10, padding: isMobile ? '4px 10px' : '5px 14px',
+          color: 'rgba(255,255,255,0.5)',
+          fontSize: isMobile ? 11 : 12, cursor: 'pointer', transition: 'all 0.2s', fontWeight: 500,
+        }}>← Exit</button>
 
         {/* Centre branding + phase */}
         <div style={{ textAlign:'center' }}>
-          <div style={{ display:'flex', alignItems:'center', gap: 8, justifyContent:'center' }}>
-            <span style={{ fontSize: 14, letterSpacing: '2px', fontWeight: 800, color: '#c084fc', textTransform:'uppercase' }}>Band Rang</span>
-          </div>
-          <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginTop: 1, letterSpacing: '0.5px', textTransform:'uppercase' }}>
+          {!isMobile && (
+            <div style={{ display:'flex', alignItems:'center', gap: 8, justifyContent:'center' }}>
+              <span style={{ fontSize: 13, letterSpacing: '2px', fontWeight: 800, color: '#c084fc', textTransform:'uppercase' }}>Band Rang</span>
+            </div>
+          )}
+          <div style={{ fontSize: isMobile ? 9 : 11, color: 'rgba(255,255,255,0.4)', marginTop: 1, letterSpacing: '0.5px', textTransform:'uppercase' }}>
             {state.phase.replace(/_/g, ' ')}
           </div>
         </div>
 
         {/* Player info + trump */}
-        <div style={{ display:'flex', alignItems:'center', gap: 10 }}>
+        <div style={{ display:'flex', alignItems:'center', gap: isMobile ? 6 : 10 }}>
           {state.trumpRevealed && state.trumpSuit && (() => {
             const isRed = state.trumpSuit === 'hearts' || state.trumpSuit === 'diamonds'
             const suitClr = isRed ? '#f87171' : '#e2e8f0'
@@ -349,28 +353,27 @@ export default function GameTablePage() {
             return (
               <div style={{
                 background: 'rgba(245,158,11,0.12)', border: '1px solid rgba(245,158,11,0.3)',
-                borderRadius: 8, padding: '3px 10px',
-                display: 'flex', alignItems: 'center', gap: 4,
+                borderRadius: 8, padding: isMobile ? '2px 6px' : '3px 10px',
+                display: 'flex', alignItems: 'center', gap: 3,
               }}>
-                {/* Scenario A: show rank + suit (e.g. "K♠") */}
                 {state.scenario === 'A' && rc ? (
                   <>
-                    <span style={{ fontSize: 13, fontWeight: 900, fontFamily: 'Georgia, serif', color: suitClr }}>
-                      {rc.rank}
-                    </span>
-                    <span style={{ fontSize: 13, color: suitClr }}>{SUIT_SYM[state.trumpSuit]}</span>
-                    <span style={{ fontSize: 9, color: 'rgba(255,255,255,0.35)' }}>rung</span>
+                    <span style={{ fontSize: isMobile ? 11 : 13, fontWeight: 900, fontFamily: 'Georgia, serif', color: suitClr }}>{rc.rank}</span>
+                    <span style={{ fontSize: isMobile ? 11 : 13, color: suitClr }}>{SUIT_SYM[state.trumpSuit]}</span>
+                    <span style={{ fontSize: 8, color: 'rgba(255,255,255,0.35)' }}>rung</span>
                   </>
                 ) : (
                   <>
-                    <span style={{ fontSize: 13, color: suitClr }}>{SUIT_SYM[state.trumpSuit]}</span>
-                    <span style={{ fontSize: 9, color: 'rgba(255,255,255,0.35)' }}>trump</span>
+                    <span style={{ fontSize: isMobile ? 11 : 13, color: suitClr }}>{SUIT_SYM[state.trumpSuit]}</span>
+                    <span style={{ fontSize: 8, color: 'rgba(255,255,255,0.35)' }}>trump</span>
                   </>
                 )}
               </div>
             )
           })()}
-          <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.45)', fontWeight: 500 }}>{user?.displayName}</div>
+          <div style={{ fontSize: isMobile ? 10 : 12, color: 'rgba(255,255,255,0.45)', fontWeight: 500, maxWidth: isMobile ? 60 : undefined, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+            {user?.displayName}
+          </div>
         </div>
       </div>
 
@@ -538,67 +541,75 @@ export default function GameTablePage() {
           <div style={{
             background: 'linear-gradient(180deg, rgba(0,0,0,0.7) 0%, rgba(0,0,0,0.9) 100%)',
             borderTop: '1px solid rgba(255,255,255,0.06)',
-            padding: '6px 12px 8px',
-            display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5,
+            padding: isMobile ? '4px 6px 6px' : '6px 12px 8px',
+            display: 'flex', flexDirection: 'column', alignItems: 'center', gap: isMobile ? 3 : 5,
             flexShrink: 0,
           }}>
 
-            {/* South player chip (above hand, touching table bottom) */}
+            {/* South player chip */}
             {(() => {
               const initial = (user?.displayName ?? 'P').charAt(0).toUpperCase()
               const isLeading = isMyTurn && state.phase === 'playing' && state.currentTrick.length === 0
               const hasPlayed = state.currentTrick.some(tc => tc.playerId === user?.id)
               const teamColor = myTeam === 'A' ? '#06b6d4' : '#f97316'
+              const avSize = isMobile ? 26 : 32
               return (
-                <div style={{ display:'flex', alignItems:'center', gap: 8 }}>
-                  {/* Avatar */}
+                <div style={{ display:'flex', alignItems:'center', gap: isMobile ? 6 : 8 }}>
                   <div style={{
-                    width: 32, height: 32, borderRadius: '50%', flexShrink: 0, position:'relative',
-                    background: myTeam === 'A'
-                      ? 'linear-gradient(135deg,#0e4a5e,#0891b2)'
-                      : 'linear-gradient(135deg,#7c2d12,#ea580c)',
+                    width: avSize, height: avSize, borderRadius: '50%', flexShrink: 0, position:'relative',
+                    background: myTeam === 'A' ? 'linear-gradient(135deg,#0e4a5e,#0891b2)' : 'linear-gradient(135deg,#7c2d12,#ea580c)',
                     border: isLeading ? `2px solid ${teamColor}` : '1.5px solid rgba(255,255,255,0.15)',
                     boxShadow: isLeading ? `0 0 12px ${teamColor}66` : '0 2px 6px rgba(0,0,0,0.5)',
                     display:'flex', alignItems:'center', justifyContent:'center',
-                    fontSize: 14, fontWeight: 800, color: '#fff', fontFamily: 'Georgia, serif',
+                    fontSize: isMobile ? 11 : 14, fontWeight: 800, color: '#fff', fontFamily: 'Georgia, serif',
                   }}>
                     {initial}
-                    {hasPlayed && <div style={{ position:'absolute', bottom:-2, right:-2, width:12, height:12, borderRadius:'50%', background:'#16a34a', border:'1.5px solid #fff', display:'flex', alignItems:'center', justifyContent:'center', fontSize:7, color:'#fff', fontWeight:700 }}>✓</div>}
+                    {hasPlayed && <div style={{ position:'absolute', bottom:-2, right:-2, width:10, height:10, borderRadius:'50%', background:'#16a34a', border:'1.5px solid #fff', display:'flex', alignItems:'center', justifyContent:'center', fontSize:6, color:'#fff', fontWeight:700 }}>✓</div>}
                   </div>
-                  {/* Info */}
                   <div>
-                    <div style={{ fontSize: 12, fontWeight: 700, color: isLeading ? '#fde68a' : '#f1f5f9', letterSpacing:'0.2px' }}>
+                    <div style={{ fontSize: isMobile ? 10 : 12, fontWeight: 700, color: isLeading ? '#fde68a' : '#f1f5f9' }}>
                       {isLeading ? '⭐ Your turn!' : (user?.displayName ?? 'You')}
                     </div>
-                    <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.4)' }}>
-                      South · Team {myTeam}
-                      {myHand.length > 0 && <span style={{ marginLeft: 5, color:'rgba(255,255,255,0.25)' }}>🂠×{myHand.length}</span>}
-                    </div>
+                    {!isMobile && (
+                      <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.4)' }}>
+                        South · Team {myTeam}
+                        {myHand.length > 0 && <span style={{ marginLeft: 5, color:'rgba(255,255,255,0.25)' }}>🂠×{myHand.length}</span>}
+                      </div>
+                    )}
                   </div>
-                  {/* Your turn hint */}
                   {isMyTurn && state.phase === 'playing' && state.currentTrick.length > 0 && (
                     <div style={{
-                      marginLeft: 6,
+                      marginLeft: 4,
                       background: 'rgba(245,158,11,0.15)', border:'1px solid rgba(245,158,11,0.35)',
-                      borderRadius: 20, padding: '2px 10px', fontSize: 10, color:'#fcd34d',
+                      borderRadius: 20, padding: isMobile ? '1px 7px' : '2px 10px',
+                      fontSize: isMobile ? 9 : 10, color:'#fcd34d',
                       animation: 'pulse 1.5s infinite',
                     }}>
-                      Play a card ↑
+                      Play ↑
                     </div>
                   )}
                 </div>
               )
             })()}
 
-            {/* Hand cards */}
-            <div style={{ display:'flex', gap: 1, flexWrap:'nowrap', justifyContent:'center', alignItems:'flex-end', overflow:'hidden' }}>
+            {/* Hand cards — horizontally scrollable on mobile */}
+            <div style={{
+              display:'flex', gap: isMobile ? 2 : 1,
+              flexWrap:'nowrap', alignItems:'flex-end',
+              overflowX: 'auto', overflowY: 'visible',
+              width: '100%', justifyContent: isSmall ? 'flex-start' : 'center',
+              paddingBottom: isMobile ? 2 : 0,
+              WebkitOverflowScrolling: 'touch',
+              scrollbarWidth: 'none',
+              paddingLeft: isSmall ? 4 : 0, paddingRight: isSmall ? 4 : 0,
+            } as React.CSSProperties}>
               {sortedHand.map((card, i) => {
                 const prevSuit = i > 0 ? sortedHand[i-1].suit : card.suit
                 const suitBreak = i > 0 && card.suit !== prevSuit
                 return (
                   <React.Fragment key={`${card.suit}${card.rank}${i}`}>
-                    {suitBreak && <div style={{ width: 5, flexShrink: 0 }} />}
-                    <div className="animate-deal-in" style={{ animationDelay: `${i * 20}ms` }}>
+                    {suitBreak && <div style={{ width: isMobile ? 4 : 5, flexShrink: 0 }} />}
+                    <div className="animate-deal-in" style={{ animationDelay: `${i * 20}ms`, flexShrink: 0 }}>
                       <PlayingCard
                         card={card}
                         disabled={!isMyTurn || state.phase !== 'playing'}
@@ -606,7 +617,7 @@ export default function GameTablePage() {
                           if (!isMyTurn || state.phase !== 'playing') return
                           playCard(card)
                         }}
-                        size="sm"
+                        size={isMobile ? 'xs' : 'sm'}
                       />
                     </div>
                   </React.Fragment>

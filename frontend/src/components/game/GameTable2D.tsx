@@ -7,6 +7,7 @@
 import React, { useEffect, useRef, useState } from 'react'
 import type { Card, TrickCard, PlayerPublicInfo, GameState } from '@/types/game.types'
 import PlayingCard from './PlayingCard'
+import { useScreenSize } from '@/hooks/useScreenSize'
 
 export interface TrickLayer { cards: TrickCard[]; winnerId: string | null }
 
@@ -199,25 +200,26 @@ function CardStack({ count }: { count: number }) {
 // the avatar. Reduces the chip's height to ~80px so North fits above the felt.
 function Chip({
   name, seat, team, isLead, hasPlayed, cardCount, face,
-  dir, compact = false, disconnected = false,
+  dir, compact = false, disconnected = false, small = false,
 }: {
   name:string; seat:string; team:'A'|'B'; isLead:boolean; hasPlayed:boolean
   cardCount:number; face:string; dir:'top'|'bottom'|'left'|'right'
-  compact?: boolean; disconnected?: boolean
+  compact?: boolean; disconnected?: boolean; small?: boolean
 }) {
   const tc    = team === 'A' ? '#22d3ee' : '#fb923c'
   const isRow = dir === 'left' || dir === 'right'
+  const av    = small ? 32 : 44   // avatar size: smaller on mobile
 
   const avatarAndName = (
-    <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:3 }}>
+    <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap: small ? 2 : 3 }}>
       <div style={{
-        width:44, height:44, borderRadius:'50%', position:'relative', flexShrink:0,
+        width:av, height:av, borderRadius:'50%', position:'relative', flexShrink:0,
         background: disconnected
           ? 'linear-gradient(135deg,#1a1a2e,#0f0f1a)'
           : (team==='A' ? 'linear-gradient(135deg,#0e4a5e,#0891b2)' : 'linear-gradient(135deg,#7c2d12,#ea580c)'),
         border: disconnected ? '2px solid rgba(239,68,68,0.7)' : (isLead ? `2px solid ${tc}` : '1.5px solid rgba(255,255,255,0.12)'),
         boxShadow: disconnected ? '0 0 14px rgba(239,68,68,0.4)' : (isLead ? `0 0 18px ${tc}88,0 0 36px ${tc}33` : '0 3px 12px rgba(0,0,0,0.6)'),
-        display:'flex', alignItems:'center', justifyContent:'center', fontSize:20,
+        display:'flex', alignItems:'center', justifyContent:'center', fontSize: small ? 14 : 20,
         opacity: disconnected ? 0.6 : 1,
       }}>
         {disconnected ? '📵' : face}
@@ -239,16 +241,19 @@ function Chip({
         background: isLead ? 'rgba(60,35,0,0.96)' : 'rgba(6,3,16,0.88)',
         backdropFilter:'blur(12px)',
         border: isLead ? `1px solid ${tc}44` : '1px solid rgba(255,255,255,0.08)',
-        borderRadius:9, padding:'4px 10px', textAlign:'center',
+        borderRadius:9, padding: small ? '2px 6px' : '4px 10px', textAlign:'center',
         boxShadow: isLead ? `0 0 14px ${tc}33` : '0 3px 12px rgba(0,0,0,0.5)',
-        minWidth:74,
+        minWidth: small ? 52 : 74,
+        maxWidth: small ? 72 : undefined,
       }}>
-        <div style={{ fontSize:11, fontWeight:700, color:isLead?'#fde68a':'#f1f5f9', whiteSpace:'nowrap' }}>
-          {isLead ? '⭐ ' : ''}{name}
+        <div style={{ fontSize: small ? 9 : 11, fontWeight:700, color:isLead?'#fde68a':'#f1f5f9', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>
+          {isLead ? '⭐ ' : ''}{small ? name.slice(0, 7) : name}
         </div>
-        <div style={{ fontSize:9, color: disconnected ? '#f87171' : 'rgba(255,255,255,0.35)', marginTop:1, letterSpacing:'0.3px' }}>
-          {disconnected ? '⚠ Disconnected' : `${seat} · T${team}`}
-        </div>
+        {!small && (
+          <div style={{ fontSize:9, color: disconnected ? '#f87171' : 'rgba(255,255,255,0.35)', marginTop:1, letterSpacing:'0.3px' }}>
+            {disconnected ? '⚠ Disconnected' : `${seat} · T${team}`}
+          </div>
+        )}
       </div>
     </div>
   )
@@ -270,6 +275,9 @@ function Chip({
 
 // ── Main component ─────────────────────────────────────────────────────────────
 export default function GameTable2D({ currentTrick, trickHistory, aiPlayers, playerMap, state, userId, isMyTurn, lastTrick, hiddenRungCard, rungRevealCard, presence }: GameTable2DProps) {
+
+  const { isMobile, isTablet } = useScreenSize()
+  const isSmall = isMobile || isTablet
 
   // SFX
   const cardSnd = useRef<HTMLAudioElement|null>(null)
@@ -421,41 +429,57 @@ export default function GameTable2D({ currentTrick, trickHistory, aiPlayers, pla
       })()}
 
       {/* ── North chip (top-centre) ──────────────────────────────────────────── */}
-      {/* Felt top is now 7%. calc(7% - 84px) pins chip bottom to felt top.    */}
-      {/* max(0px,...) prevents it going above the container top.               */}
       {north && (
-        <div style={{ position:'absolute', top:'max(0px, calc(7% - 84px))', left:'50%', transform:'translateX(-50%)', zIndex:20 }}>
+        <div style={{
+          position:'absolute',
+          top: isMobile ? '1px' : 'max(0px, calc(7% - 84px))',
+          left:'50%', transform:'translateX(-50%)', zIndex:20,
+        }}>
           <Chip name={north.displayName??'Bot'} seat="North" team={north.team}
             isLead={state.phase==='playing'&&state.currentTrick.length===0&&state.leadPlayerId===north.id}
             hasPlayed={state.currentTrick.some(t=>t.playerId===north.id)}
             cardCount={state.handCounts?.[north.id]??0}
             face="👾" dir="bottom" compact
-            disconnected={presence[north.id]==='disconnected'} />
+            disconnected={presence[north.id]==='disconnected'}
+            small={isMobile} />
         </div>
       )}
 
       {/* ── East chip (right-middle) ─────────────────────────────────────────── */}
-      {/* Felt right boundary is now 19%. calc(19% - 146px) pins avatar to edge */}
+      {/* On mobile/tablet: compact chip, flush to right edge.                  */}
+      {/* On desktop: full chip with card-stack, offset from oval edge.         */}
       {east && (
-        <div style={{ position:'absolute', right:'calc(19% - 146px)', top:'50%', transform:'translateY(-50%)', zIndex:20 }}>
+        <div style={{
+          position:'absolute',
+          right: isSmall ? '2px' : 'calc(19% - 146px)',
+          top:'50%', transform:'translateY(-50%)', zIndex:20,
+        }}>
           <Chip name={east.displayName??'Bot'} seat="East" team={east.team}
             isLead={state.phase==='playing'&&state.currentTrick.length===0&&state.leadPlayerId===east.id}
             hasPlayed={state.currentTrick.some(t=>t.playerId===east.id)}
             cardCount={state.handCounts?.[east.id]??0}
             face="🤖" dir="left"
-            disconnected={presence[east.id]==='disconnected'} />
+            compact={isSmall}
+            disconnected={presence[east.id]==='disconnected'}
+            small={isMobile} />
         </div>
       )}
 
       {/* ── West chip (left-middle) ──────────────────────────────────────────── */}
       {west && (
-        <div style={{ position:'absolute', left:'calc(19% - 146px)', top:'50%', transform:'translateY(-50%)', zIndex:20 }}>
+        <div style={{
+          position:'absolute',
+          left: isSmall ? '2px' : 'calc(19% - 146px)',
+          top:'50%', transform:'translateY(-50%)', zIndex:20,
+        }}>
           <Chip name={west.displayName??'Bot'} seat="West" team={west.team}
             isLead={state.phase==='playing'&&state.currentTrick.length===0&&state.leadPlayerId===west.id}
             hasPlayed={state.currentTrick.some(t=>t.playerId===west.id)}
             cardCount={state.handCounts?.[west.id]??0}
             face="🦾" dir="right"
-            disconnected={presence[west.id]==='disconnected'} />
+            compact={isSmall}
+            disconnected={presence[west.id]==='disconnected'}
+            small={isMobile} />
         </div>
       )}
 

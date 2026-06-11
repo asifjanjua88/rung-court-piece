@@ -22,6 +22,7 @@ const SUIT_COLOR: Record<string, string> = {
 }
 
 const SZ = {
+  xs: { w: 38,  h: 55,  r: 9,  s: 9,  pip: 20 },
   sm: { w: 52,  h: 76,  r: 13, s: 12, pip: 30 },
   md: { w: 68,  h: 98,  r: 17, s: 15, pip: 40 },
   lg: { w: 84,  h: 120, r: 21, s: 19, pip: 52 },
@@ -30,7 +31,7 @@ const SZ = {
 export default function PlayingCard({
   card, faceDown = false, selected = false, disabled = false,
   dimmed = false, onClick, size = 'md',
-}: PlayingCardProps) {
+}: PlayingCardProps & { size?: 'xs' | 'sm' | 'md' | 'lg' }) {
   const s        = SZ[size]
   const color    = card ? SUIT_COLOR[card.suit] : '#1a202c'
   const sym      = card ? SYM[card.suit] : ''
@@ -66,15 +67,20 @@ export default function PlayingCard({
     zIndex: isLifted ? 10 : 'auto',
   }
 
-  const handleEnter = () => { if (!disabled) setHovered(true)  }
-  const handleLeave = () => setHovered(false)
-  const handleClick = () => { if (canClick) { setHovered(false); onClick?.() } }
+  const handleEnter      = () => { if (!disabled) setHovered(true)  }
+  const handleLeave      = () => setHovered(false)
+  const handleClick      = () => { if (canClick) { setHovered(false); onClick?.() } }
+  // Touch: lift on press, fire click on release (no hover state needed)
+  const handleTouchStart = (e: React.TouchEvent) => { if (canClick) { e.preventDefault(); setHovered(true) } }
+  const handleTouchEnd   = (e: React.TouchEvent) => { if (canClick) { e.preventDefault(); setHovered(false); onClick?.() } }
 
   /* ── Face-down ── */
   if (faceDown || !card) {
     return (
       <div style={base} onClick={canClick ? handleClick : undefined}
-           onMouseEnter={handleEnter} onMouseLeave={handleLeave}>
+           onMouseEnter={handleEnter} onMouseLeave={handleLeave}
+           onTouchStart={canClick ? handleTouchStart : undefined}
+           onTouchEnd={canClick ? handleTouchEnd : undefined}>
         <div style={{
           position: 'absolute', inset: 0, borderRadius: 9, overflow: 'hidden',
           background: 'linear-gradient(145deg, #1a0533 0%, #2d0a5e 40%, #1a0533 100%)',
@@ -103,7 +109,9 @@ export default function PlayingCard({
   /* ── Face-up ── */
   return (
     <div style={base} onClick={canClick ? handleClick : undefined}
-         onMouseEnter={handleEnter} onMouseLeave={handleLeave}>
+         onMouseEnter={handleEnter} onMouseLeave={handleLeave}
+         onTouchStart={canClick ? handleTouchStart : undefined}
+         onTouchEnd={canClick ? handleTouchEnd : undefined}>
       <div style={{
         position: 'absolute', inset: 0, borderRadius: 9, overflow: 'hidden',
         background: 'linear-gradient(165deg, #ffffff 0%, #faf6f0 100%)',
