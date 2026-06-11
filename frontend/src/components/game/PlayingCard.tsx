@@ -9,7 +9,7 @@ interface PlayingCardProps {
   disabled?: boolean
   dimmed?: boolean
   onClick?: () => void
-  size?: 'sm' | 'md' | 'lg'
+  size?: 'xs' | 'sm' | 'md' | 'lg'
 }
 
 const SYM: Record<string, string> = { spades:'♠', hearts:'♥', diamonds:'♦', clubs:'♣' }
