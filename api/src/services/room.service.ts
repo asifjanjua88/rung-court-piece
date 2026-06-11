@@ -196,7 +196,12 @@ export async function joinPrivateRoom(accessCode: string, playerId: string) {
 
   const room = await getRoomWithSlots(roomId)
   if (!room) throw new Error('ROOM_NOT_FOUND')
-  if (room.status !== 'waiting') throw new Error('ROOM_NOT_OPEN')
+
+  // Allow joining when 'waiting' OR 'ready' — the room can flip to 'ready'
+  // as the last human player is added, so we must not block that final join.
+  if (room.status === 'finished' || room.status === 'in_progress') {
+    throw new Error('ROOM_NOT_OPEN')
+  }
 
   return insertPlayerIntoRoom(room, playerId)
 }
