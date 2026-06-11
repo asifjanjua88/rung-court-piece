@@ -28,19 +28,11 @@ export interface GameTable2DProps {
   presence:        Record<string, 'connected' | 'disconnected'>
 }
 
-// Build server-position → screen-seat map RELATIVE to the human player's
-// actual server position (which may not always be 0).
-// Screen seats: 0=South(me), 1=East, 2=North, 3=West
-// Offset pattern (verified from SERVER_CCW deal order [0,3,2,1]):
-//   myPos+0 → South(0), myPos+1 → West(3), myPos+2 → North(2), myPos+3 → East(1)
-function buildS2S(myServerPos: number): Record<number, number> {
-  return {
-    [myServerPos]:            0,  // me        → South
-    [(myServerPos + 1) % 4]: 3,  // +1 offset → West
-    [(myServerPos + 2) % 4]: 2,  // +2 offset → North
-    [(myServerPos + 3) % 4]: 1,  // +3 offset → East
-  }
-}
+// Fixed absolute server-position → screen-seat map.
+// This is the SAME for ALL viewers so every player sees the same table layout.
+// Server pos 0 = South, 1 = West, 2 = North, 3 = East
+// (Positions 0 & 2 are Team A partners; 1 & 3 are Team B partners)
+const FIXED_S2S: Record<number, number> = { 0: 0, 1: 3, 2: 2, 3: 1 }
 
 // Card slot positions — % of the ROOT table container.
 // Oval spans top:7%→bottom:7% (felt), left:19%→right:19%.
@@ -285,11 +277,8 @@ export default function GameTable2D({ currentTrick, trickHistory, aiPlayers, pla
   const prevLen = useRef(0)
   const prevLT  = useRef<number|null>(null)
 
-  // Dynamic server-position → screen-seat mapping.
-  // Computed from the human player's ACTUAL server position so the mapping
-  // stays correct regardless of which seat the server assigned to the user.
-  const myServerPos = state.players.find(p => p.id === userId)?.position ?? 0
-  const S2S = buildS2S(myServerPos)
+  // Use the fixed absolute seat map — identical for every viewer.
+  const S2S = FIXED_S2S
 
   useEffect(() => {
     try { cardSnd.current = new Audio('/sounds/card-play.wav'); cardSnd.current.volume = 0.55 } catch {}
@@ -309,8 +298,9 @@ export default function GameTable2D({ currentTrick, trickHistory, aiPlayers, pla
     }
   }, [lastTrick])
 
-  const getAI = (seat: number) => aiPlayers.find(p => S2S[p.position] === seat)
-  const north = getAI(2), east = getAI(1), west = getAI(3)
+  // Use ALL players (including self) so chips appear at their true absolute seats.
+  const getPlayer = (seat: number) => state.players.find(p => S2S[p.position] === seat)
+  const south = getPlayer(0), north = getPlayer(2), east = getPlayer(1), west = getPlayer(3)
 
   return (
     // Fills the container div completely
@@ -439,8 +429,8 @@ export default function GameTable2D({ currentTrick, trickHistory, aiPlayers, pla
             isLead={state.phase==='playing'&&state.currentTrick.length===0&&state.leadPlayerId===north.id}
             hasPlayed={state.currentTrick.some(t=>t.playerId===north.id)}
             cardCount={state.handCounts?.[north.id]??0}
-            face="👾" dir="bottom" compact
-            disconnected={presence[north.id]==='disconnected'}
+            face={north.id===userId ? '👤' : '👾'} dir="bottom" compact
+            disconnected={north.id!==userId && presence[north.id]==='disconnected'}
             small={isMobile} />
         </div>
       )}
@@ -458,9 +448,9 @@ export default function GameTable2D({ currentTrick, trickHistory, aiPlayers, pla
             isLead={state.phase==='playing'&&state.currentTrick.length===0&&state.leadPlayerId===east.id}
             hasPlayed={state.currentTrick.some(t=>t.playerId===east.id)}
             cardCount={state.handCounts?.[east.id]??0}
-            face="🤖" dir="left"
+            face={east.id===userId ? '👤' : '🤖'} dir="left"
             compact={isSmall}
-            disconnected={presence[east.id]==='disconnected'}
+            disconnected={east.id!==userId && presence[east.id]==='disconnected'}
             small={isMobile} />
         </div>
       )}
@@ -476,9 +466,28 @@ export default function GameTable2D({ currentTrick, trickHistory, aiPlayers, pla
             isLead={state.phase==='playing'&&state.currentTrick.length===0&&state.leadPlayerId===west.id}
             hasPlayed={state.currentTrick.some(t=>t.playerId===west.id)}
             cardCount={state.handCounts?.[west.id]??0}
-            face="🦾" dir="right"
+            face={west.id===userId ? '👤' : '🦾'} dir="right"
             compact={isSmall}
             disconnected={presence[west.id]==='disconnected'}
+            small={isMobile} />
+        </div>
+      )}
+
+      {/* ── South chip (bottom-centre) — shows the server-pos-0 player ──────── */}
+      {south && (
+        <div style={{
+          position:'absolute',
+          bottom: isMobile ? '1px' : 'max(0px, calc(7% - 84px))',
+          left:'50%', transform:'translateX(-50%)', zIndex:20,
+        }}>
+          <Chip name={south.id===userId ? (south.displayName??'You') : (south.displayName??'Bot')}
+            seat="South" team={south.team}
+            isLead={state.phase==='playing'&&state.currentTrick.length===0&&state.leadPlayerId===south.id}
+            hasPlayed={state.currentTrick.some(t=>t.playerId===south.id)}
+            cardCount={state.handCounts?.[south.id]??0}
+            face={south.id===userId ? '👤' : '🧑'} dir="top"
+            compact
+            disconnected={south.id!==userId && presence[south.id]==='disconnected'}
             small={isMobile} />
         </div>
       )}

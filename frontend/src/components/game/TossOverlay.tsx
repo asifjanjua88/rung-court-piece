@@ -11,14 +11,8 @@ const SUIT_SYMBOL: Record<string, string> = {
   spades: '♠', hearts: '♥', diamonds: '♦', clubs: '♣',
 }
 
-function buildServerToScreen(myPos: number): Record<number, number> {
-  return {
-    [myPos]:            0,  // me        → South
-    [(myPos + 1) % 4]: 3,  // +1 offset → West
-    [(myPos + 2) % 4]: 2,  // +2 offset → North
-    [(myPos + 3) % 4]: 1,  // +3 offset → East
-  }
-}
+// Fixed absolute mapping — same for ALL viewers (pos 0=South, 1=West, 2=North, 3=East)
+const FIXED_S2S: Record<number, number> = { 0: 0, 1: 3, 2: 2, 3: 1 }
 
 // Positions matching FELT_CARD_POS in GameTable2D.tsx (% of container, centred on point)
 const SEAT_STYLE: Record<number, React.CSSProperties> = {
@@ -53,9 +47,8 @@ export default function TossOverlay({ toss, playerPositions, playerNames, myId, 
   const [flippedCount, setFlippedCount] = useState(0)
   const [stage, setStage]               = useState<Stage>('dealing')
 
-  // Dynamic mapping: correct for any server-assigned position the human player has
-  const myServerPos     = playerPositions[myId] ?? 0
-  const SERVER_TO_SCREEN = buildServerToScreen(myServerPos)
+  // Use the fixed absolute map — same layout for every viewer
+  const SERVER_TO_SCREEN = FIXED_S2S
 
   const sortedCards = [...toss.tossCards].sort(
     (a, b) => (playerPositions[a.playerId] ?? 0) - (playerPositions[b.playerId] ?? 0)

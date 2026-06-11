@@ -19,6 +19,7 @@ export class GameRoom {
   private sockets: Map<string, Socket> = new Map()       // playerId → socket
   private connectedPlayers: Set<string> = new Set()      // who is currently online
   private reconnectTimers: Map<string, ReturnType<typeof setTimeout>> = new Map()
+  private microGraceTimers: Map<string, ReturnType<typeof setTimeout>> = new Map()
   private machine: GameStateMachine | null = null
   private dealingTeam: Team = 'A'
   private io: Server
@@ -49,9 +50,11 @@ export class GameRoom {
 
     const wasDisconnected = !this.connectedPlayers.has(playerId) && this.sockets.has(playerId)
 
-    // Cancel any pending "gone" timer for this player
+    // Cancel any pending disconnect timers for this player
     const existing = this.reconnectTimers.get(playerId)
     if (existing) { clearTimeout(existing); this.reconnectTimers.delete(playerId) }
+    const micro = this.microGraceTimers.get(playerId)
+    if (micro) { clearTimeout(micro); this.microGraceTimers.delete(playerId) }
 
     this.sockets.set(playerId, socket)
     this.connectedPlayers.add(playerId)
@@ -87,35 +90,46 @@ export class GameRoom {
     const slot = this.slots.find(s => s.playerId === playerId)
     if (!slot) return                          // not in this room
 
-    this.connectedPlayers.delete(playerId)
+    // Remove socket reference immediately so stale socket isn't used
     this.sockets.delete(playerId)
 
-    // Notify everyone immediately
-    this.broadcastToRoom('player_disconnected', {
-      playerId,
-      displayName: slot.displayName ?? playerId,
-      position:    slot.position,
-      presence:    this.getPresence(),
-      gracePeriodMs: RECONNECT_GRACE_MS,
-    })
+    // 3-second micro-grace before we treat this as a real disconnect.
+    // Covers the brief socket drop that happens during Next.js page navigation
+    // (room → game). If the player reconnects within 3 s we skip the broadcast.
+    const microTimer = setTimeout(() => {
+      this.microGraceTimers.delete(playerId)
+      // If player already reconnected (join() was called), skip the disconnect broadcast
+      if (this.connectedPlayers.has(playerId)) return
 
-    console.log(`[GameRoom] ${playerId} disconnected from ${this.roomId} — grace ${RECONNECT_GRACE_MS / 1000}s`)
+      this.connectedPlayers.delete(playerId)
 
-    // Start grace period — after expiry just keep the slot reserved (no AI takeover)
-    const timer = setTimeout(() => {
-      this.reconnectTimers.delete(playerId)
-      console.log(`[GameRoom] Grace period expired for ${playerId} in ${this.roomId}`)
-      // Broadcast updated presence so UI can show permanent "away" indicator
+      // Notify everyone
       this.broadcastToRoom('player_disconnected', {
         playerId,
         displayName: slot.displayName ?? playerId,
         position:    slot.position,
         presence:    this.getPresence(),
-        gracePeriodMs: 0,   // 0 = grace expired
+        gracePeriodMs: RECONNECT_GRACE_MS,
       })
-    }, RECONNECT_GRACE_MS)
 
-    this.reconnectTimers.set(playerId, timer)
+      console.log(`[GameRoom] ${playerId} disconnected from ${this.roomId} — grace ${RECONNECT_GRACE_MS / 1000}s`)
+
+      // Start 90s grace period — after expiry keep the slot reserved (no AI takeover)
+      const timer = setTimeout(() => {
+        this.reconnectTimers.delete(playerId)
+        console.log(`[GameRoom] Grace period expired for ${playerId} in ${this.roomId}`)
+        this.broadcastToRoom('player_disconnected', {
+          playerId,
+          displayName: slot.displayName ?? playerId,
+          position:    slot.position,
+          presence:    this.getPresence(),
+          gracePeriodMs: 0,   // 0 = grace expired
+        })
+      }, RECONNECT_GRACE_MS)
+
+      this.reconnectTimers.set(playerId, timer)
+    }, 3000)
+    this.microGraceTimers.set(playerId, microTimer)
   }
 
   // ── Start game (called when all slots filled and creator triggers start) ──────
@@ -320,19 +334,37 @@ export class GameRoom {
   /**
    * Send the current game snapshot directly to one socket.
    * Used by request_game_state — game page asks for state on mount.
+   * Also marks the player as connected so presence is correct for all viewers.
    */
   sendStateTo(socket: Socket, playerId: string): void {
-    // Make sure their socket is registered and in the channel
     const slot = this.slots.find(s => s.playerId === playerId)
     if (!slot) { socket.emit('game_error', { message: 'Not in this room' }); return }
+
+    // Cancel any pending disconnect timers
+    const existing = this.reconnectTimers.get(playerId)
+    if (existing) { clearTimeout(existing); this.reconnectTimers.delete(playerId) }
+    const micro = this.microGraceTimers.get(playerId)
+    if (micro) { clearTimeout(micro); this.microGraceTimers.delete(playerId) }
+
+    const wasConnected = this.connectedPlayers.has(playerId)
+
     this.sockets.set(playerId, socket)
+    this.connectedPlayers.add(playerId)   // ← mark as connected (was missing before)
     socket.join(this.roomId)
 
     if (this.machine) {
       socket.emit('game_state', { ...this.machine.getSnapshot(), presence: this.getPresence() })
       socket.emit('hand_update', { hand: this.machine.getHandFor(playerId) })
     }
-    // If machine not started yet, client will receive game_state when startGame() fires
+
+    // Broadcast updated presence to room if player was previously shown as disconnected
+    if (!wasConnected) {
+      this.broadcastToRoom('player_connected', {
+        playerId,
+        position: slot.position,
+        presence: this.getPresence(),
+      })
+    }
   }
 
   /** Start the next round (called after round_over when a player clicks Play Again) */
