@@ -19,6 +19,7 @@ export type GamePhase =
   | 'awaiting_deal'     // toss done — waiting for dealing-team player to click Deal
   | 'dealing_batch1'
   | 'rung_selection'
+  | 'rung_placed'       // rung card chosen — waiting for batch2 timer
   | 'dealing_batch2'
   | 'dealing_batch3'
   | 'color_call'
@@ -136,11 +137,15 @@ export class GameStateMachine {
 
     this.runToss()
 
+    // runToss() updates this._dealingTeam to the toss LOSER (they deal)
+    // Use this._dealingTeam here (not the original parameter)
+    this.state.dealingTeam = this._dealingTeam
+
     // Pause here — wait for dealing team to click Deal
     this.state.phase = 'awaiting_deal'
     this.emit('awaiting_deal', {
-      dealingTeam,
-      message: `Team ${dealingTeam} — click Deal to distribute cards`,
+      dealingTeam: this._dealingTeam,
+      message: `Team ${this._dealingTeam} — click Deal to distribute cards`,
     })
 
     return this.flushEvents()
@@ -200,6 +205,11 @@ export class GameStateMachine {
 
     // Persist in snapshot so late-joining game page clients can see the toss result
     this.state.tossResult = tossPayload
+
+    // ── Toss loser deals: opposite team of winner ─────────────────────────────
+    const dealingTeam: Team = winnerPlayer.team === 'A' ? 'B' : 'A'
+    this._dealingTeam = dealingTeam
+    this.state.dealingTeam = dealingTeam
 
     this.emit('toss_result', tossPayload)
   }
@@ -265,6 +275,9 @@ export class GameStateMachine {
     )
     this._hiddenRungCard = card
     this.state.hasHiddenRung = true
+
+    // Immediately move out of rung_selection so the picker overlay hides at once
+    this.state.phase = 'rung_placed'
 
     this.emit('rung_selected', { rungHolderId: playerId })
 
