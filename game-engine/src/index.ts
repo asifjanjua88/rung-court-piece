@@ -165,15 +165,24 @@ io.on('connection', (socket) => {
     const { roomId } = payload
     console.log(`[join_room] Player ${playerId} joining room ${roomId}`)
     try {
-      if (!rooms.has(roomId)) {
-        // Load room configuration from the database
-        const slots = await loadRoomSlots(roomId)
-        if (slots.length === 0) {
-          socket.emit('game_error', { error: 'Room not found or not yet configured.' })
-          return
-        }
-        rooms.set(roomId, new GameRoom(roomId, slots, io))
+      // Always load fresh slots so late-joining players (pos 1-3) are present.
+      // The GameRoom may have been created when only pos-0 was in the DB; without
+      // this refresh, players 2/3/4 can never be found by GameRoom.join() and
+      // are silently dropped (never added to connectedPlayers / socket room).
+      const freshSlots = await loadRoomSlots(roomId)
+      if (freshSlots.length === 0) {
+        socket.emit('game_error', { error: 'Room not found or not yet configured.' })
+        return
       }
+
+      if (!rooms.has(roomId)) {
+        rooms.set(roomId, new GameRoom(roomId, freshSlots, io))
+      } else {
+        // Refresh cached slots — new human players may have joined since the
+        // GameRoom was first created
+        rooms.get(roomId)!.updateSlots(freshSlots)
+      }
+
       rooms.get(roomId)!.join(socket, playerId)
       playerRoom.set(playerId, roomId)        // remember which room this player is in
     } catch (err) {
@@ -197,19 +206,24 @@ io.on('connection', (socket) => {
   })
 
   // ── Request current game snapshot (game page uses this on mount) ────────────
-  socket.on('request_game_state', (payload: { roomId: string }) => {
-    const room = rooms.get(payload.roomId)
-    if (!room) {
-      // Room not in memory yet — try to load it so we can send state
-      loadRoomSlots(payload.roomId).then(slots => {
-        if (slots.length === 0) return
-        const newRoom = new GameRoom(payload.roomId, slots, io)
+  socket.on('request_game_state', async (payload: { roomId: string }) => {
+    try {
+      // Always reload slots to ensure this player is known to the GameRoom
+      const freshSlots = await loadRoomSlots(payload.roomId)
+      if (freshSlots.length === 0) return
+
+      if (!rooms.has(payload.roomId)) {
+        const newRoom = new GameRoom(payload.roomId, freshSlots, io)
         rooms.set(payload.roomId, newRoom)
-        newRoom.join(socket, playerId)   // join + sends state if game started
-      }).catch(err => console.error('[request_game_state] load error:', err))
-      return
+        newRoom.join(socket, playerId)
+      } else {
+        const room = rooms.get(payload.roomId)!
+        room.updateSlots(freshSlots)
+        room.sendStateTo(socket, playerId)
+      }
+    } catch (err) {
+      console.error('[request_game_state] error:', err)
     }
-    room.sendStateTo(socket, playerId)
   })
 
   // ── Deal cards (dealing-team player clicks "Deal") ──────────────────────────
